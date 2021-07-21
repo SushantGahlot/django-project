@@ -1,0 +1,60 @@
+version: "3.7"
+
+networks:
+    efakturnetwork:
+      name: efaktur-network
+
+volumes:
+    postgres_data:
+        name: postgres-data
+
+services:
+    db:
+        image: postgres:12.0
+        restart: on-failure
+        env_file: 
+            - ./.env
+        environment:
+            POSTGRES_PASSWORD: ${PASSWORD}
+            POSTGRES_USER: ${DATABASE_USER}
+            POSTGRES_DB: ${NAME}
+        ports:
+            - "${DATABASE_PORT}:${DATABASE_PORT}"
+        volumes: 
+            - postgres_data:/var/lib/postgresql/data/
+        networks: 
+            - efakturnetwork
+    web:
+        build:
+            context: ./eFaktur
+            dockerfile: ./Dockerfile
+        command: gunicorn eFaktur.wsgi:application --bind 0.0.0.0:${WEBAPP_PORT}
+        volumes: 
+            - ./eFaktur:/usr/src/eFaktur
+        expose: 
+            - ${WEBAPP_PORT}
+        networks: 
+            - efakturnetwork
+        env_file: 
+            - ./.env
+            - ./webapp.env
+        depends_on: 
+            - db
+            - cache
+    nginx:
+        build: ./nginx
+        ports: 
+            - "${NGINX_HOST_PORT}:${NGINX_CONTAINER_PORT}"
+        depends_on: 
+            - web
+        networks: 
+            - efakturnetwork
+    ${CACHE_NAME}:
+        image: memcached
+        ports: 
+            - "${CACHE_PORT}:${CACHE_PORT}"
+        entrypoint:
+            - memcached
+            - -m ${CACHE_SIZE}
+        networks: 
+            - efakturnetwork
